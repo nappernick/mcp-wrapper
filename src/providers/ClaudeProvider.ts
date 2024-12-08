@@ -1,70 +1,88 @@
-// src/providers/ClaudeProvider.ts
 import { ModelProvider, ModelProviderOptions, ToolFunction, ModelMessage, ModelToolCall, ToolResult } from './ModelProvider';
 import Anthropic from '@anthropic-ai/sdk';
 import logger from '../utils/Logger';
 
+import type { MessageParam, Tool } from '@anthropic-ai/sdk/resources/messages.mjs';
 interface AnthropicToolResultBlock {
   type: 'tool_result';
   content: string;
-  tool_use_id: string;
-  is_error?: boolean;
+  tool_call_id: string;
 }
 
-function toAnthropicTool(t: ToolFunction): Anthropic.Messages.Tool {
-  return {
-    name: t.name,
-    description: t.description,
-    input_schema: t.input_schema as Anthropic.Messages.Tool.InputSchema
-  };
-}
-
-type ClaudeToolUseBlock = {
-  type: 'tool_use';
+type ClaudeToolCall = {
   id: string;
-  name: string;
-  input: Record<string, any>;
-}
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+};
+
+type ClaudeContent = {
+  type: 'text' | 'tool_calls';
+  text?: string;
+  tool_calls?: ClaudeToolCall[];
+};
 
 type ClaudeTextBlock = {
   type: 'text';
   text: string;
 }
 
-type ClaudeContentBlock = ClaudeToolUseBlock | ClaudeTextBlock;
+type ClaudeToolBlock = {
+  type: 'text';
+  tool_calls: ClaudeToolCall[];
+}
 
 export class ClaudeProvider implements ModelProvider {
   private client: Anthropic;
+  private model = 'claude-3-sonnet-20240229';
 
   constructor(apiKey: string) {
     this.client = new Anthropic({ apiKey });
     logger.info('ClaudeProvider initialized.');
   }
 
-  async generateResponse(prompt: string, options: ModelProviderOptions = {}): Promise<string> {
-    logger.info('Generating response with Claude (no tools).', { prompt, options });
+  private conversationHistory: ModelMessage[] = [];
 
-    const response = await this.client.messages.create({
-      model: 'claude-3-5-sonnet-20240620',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: options.maxTokens ?? 4000,
-      temperature: options.temperature ?? 0.7,
-      top_p: options.topP ?? 1.0,
-      stop_sequences: options.stopSequences,
-    });
-
-    const textContent = response.content
-      .filter((c: any) => c.type === 'text')
-      .map((c: any) => c.text)
-      .join('')
-      .trim();
-    return textContent;
+  private convertToAnthropicTools(tools: ToolFunction[]): any[] {
+    return tools.map(tool => ({
+      name: tool.name,
+      description: tool.description,
+      input_schema: {
+        type: 'object',
+        properties: tool.input_schema.properties,
+        required: tool.input_schema.required || []
+      }
+    }));
   }
 
-  private toAnthropicMessages(messages: ModelMessage[]): any[] {
-    return messages.map(m => ({
-      role: m.role,
-      content: [{ type: 'text', text: m.content }]
+  private convertToAnthropicMessages(messages: ModelMessage[]): any[] {
+    return messages.map(msg => ({
+      role: msg.role === 'system' ? 'user' : msg.role,
+      content: msg.content
     }));
+  }
+
+  async generateResponse(prompt: string, options: ModelProviderOptions = {}): Promise<string> {
+    try {
+      const response = await this.client.messages.create({
+        model: this.model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: options.maxTokens ?? 1024,
+        temperature: options.temperature ?? 0.7,
+      });
+
+      // Handle the content block correctly using type predicates
+      const textBlocks = response.content.filter((block): block is ClaudeTextBlock => 
+        block.type === 'text'
+      );
+      
+      return textBlocks.map(block => block.text).join(' ').trim();
+    } catch (error) {
+      logger.error('Failed to generate response:', error);
+      throw error;
+    }
   }
 
   async generateWithTools(
@@ -72,47 +90,50 @@ export class ClaudeProvider implements ModelProvider {
     tools: ToolFunction[],
     options: ModelProviderOptions = {}
   ): Promise<{ response?: string; toolCalls?: ModelToolCall[] }> {
-    logger.info('Generating response with Claude (with tools)...');
-  
-    const anthMessages = this.toAnthropicMessages(messages);
-    const anthTools = tools.map(toAnthropicTool);
-  
-    const response = await this.client.messages.create({
-      model: 'claude-3-5-sonnet-20240620',
-      messages: anthMessages,
-      max_tokens: options.maxTokens ?? 1024,
-      temperature: options.temperature ?? 0.7,
-      top_p: options.topP ?? 1.0,
-      stop_sequences: options.stopSequences,
-      tools: anthTools, 
-    });
-  
-    // Claude returns tool calls as 'tool_use' blocks
-    const toolUses = response.content.filter((c): c is ClaudeToolUseBlock => c.type === 'tool_use');
-    
-  if (toolUses.length > 0) {
-    const calls: ModelToolCall[] = toolUses
-      .map(tu => {
-        // Check if name is present
-        if (!tu.name) {
-          return null; // skip this malformed tool
-        }
-        return { name: tu.name, arguments: tu.input };
-      })
-      .filter((c): c is ModelToolCall => c !== null);
+    try {
+      logger.info('Generating response with Claude (with tools)...');
 
-    if (calls.length > 0) {
-      return { toolCalls: calls };
+      const response = await this.client.messages.create({
+        model: this.model,
+        messages: this.convertToAnthropicMessages(messages),
+        max_tokens: options.maxTokens ?? 1024,
+        temperature: options.temperature ?? 0.7,
+        tools: this.convertToAnthropicTools(tools),
+      });
+
+      // Handle tool calls if present
+      const toolUseBlocks = response.content.filter(
+        (block: any) => block.type === 'tool_use'
+      );
+
+      console.log("\n\n\n\n\n\nTOOL USE BLOCKS", toolUseBlocks);
+
+      // Get text content from response
+      const textContent = response.content
+        .filter((block: any) => block.type === 'text')
+        .map((block: any) => block.text)
+        .join(' ')
+        .trim();
+
+      if (toolUseBlocks.length > 0) {
+        const toolCalls = toolUseBlocks.map((block: any) => ({
+          id: block.id,
+          name: block.name,
+          arguments: block.input
+        })).filter(call => call.name); // Only include calls with valid names
+
+        // If we have valid tool calls, return them
+        if (toolCalls.length > 0) {
+          return { toolCalls };
+        }
+      }
+
+      // Return text response if no valid tool calls
+      return { response: textContent || 'I will call a tool now.' };
+    } catch (error) {
+      logger.error('Failed to generate with tools:', error);
+      throw error;
     }
-  }
-  
-    // No tool calls, return the textual response
-    const textContent = response.content
-      .filter((c): c is ClaudeTextBlock => c.type === 'text')
-      .map(c => c.text)
-      .join('')
-      .trim();
-    return { response: textContent };
   }
 
   async continueWithToolResult(
@@ -121,38 +142,57 @@ export class ClaudeProvider implements ModelProvider {
     toolResults: ToolResult[],
     options: ModelProviderOptions = {}
   ): Promise<{ response: string }> {
-    logger.info('Continuing with tool result (Claude)...');
+    try {
+      logger.info('Continuing with tool result (Claude)...');
 
-    const tool_use_id = "some_tool_call_id";
+      // Update conversation history
+      if (this.conversationHistory.length === 0) {
+        this.conversationHistory = [...messages];
+      }
 
-    const anthMessages = this.toAnthropicMessages(messages);
+      // Add tool results to conversation as JSON strings
+      toolResults.forEach((result) => {
+        const toolResultContent = JSON.stringify({
+          type: 'tool_result',
+          tool_use_id: 'id' in result ? result.id : '9999',
+          content: typeof result.result === 'string' ? result.result : JSON.stringify(result.result)
+        });
 
-    const toolResultBlocks: AnthropicToolResultBlock[] = toolResults.map(tr => ({
-      type: 'tool_result',
-      tool_use_id: tool_use_id,
-      content: typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result)
-    }));
+        this.conversationHistory.push({
+          role: 'user',
+          content: toolResultContent
+        });
+      });
 
-    const toolResultMessage = {
-      role: 'user' as const,
-      content: toolResultBlocks
-    };
+      console.log("\n\nMessages being sent to Claude:", 
+        JSON.stringify(this.conversationHistory, null, 2));
 
-    const finalMessages = [...anthMessages, toolResultMessage];
+      const response = await this.client.messages.create({
+        model: this.model,
+        messages: this.convertToAnthropicMessages(this.conversationHistory),
+        max_tokens: options.maxTokens ?? 1024,
+        temperature: options.temperature ?? 0.7,
+        tools: this.convertToAnthropicTools(tools),
+      });
 
-    const response = await this.client.messages.create({
-      model: 'claude-3-5-sonnet-20240620',
-      messages: finalMessages,
-      max_tokens: options.maxTokens ?? 1024,
-      temperature: options.temperature ?? 0.7,
-      top_p: options.topP ?? 1.0,
-    });
+      // Add Claude's response to history
+      const textContent = response.content
+        .filter((block: any) => block.type === 'text')
+        .map((block: any) => block.text)
+        .join(' ')
+        .trim();
 
-    const textContent = response.content
-      .filter((c: any) => c.type === 'text')
-      .map((c: any) => c.text)
-      .join('')
-      .trim();
-    return { response: textContent };
+      if (textContent) {
+        this.conversationHistory.push({
+          role: 'assistant',
+          content: textContent
+        });
+      }
+
+      return { response: textContent };
+    } catch (error) {
+      logger.error('Failed to continue with tool result:', error);
+      throw error;
+    }
   }
 }

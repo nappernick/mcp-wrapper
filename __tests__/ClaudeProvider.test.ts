@@ -1,8 +1,7 @@
 // __tests__/ClaudeProvider.test.ts
 import { expect, test, mock, describe, beforeEach } from "bun:test";
 import { ClaudeProvider } from '../src/providers/ClaudeProvider';
-import { ModelMessage, ToolFunction } from '../src/providers/ModelProvider';
-import Anthropic from '@anthropic-ai/sdk';
+import { ModelMessage, ToolFunction, ToolResult } from '../src/providers/ModelProvider';
 
 // Define mock response types
 interface ClaudeTextBlock {
@@ -87,7 +86,7 @@ const mockMalformedToolResponse: ClaudeResponse = {
       id: 'call_999',
       // name is missing!
       input: { key: 'value' }
-    } as unknown as ClaudeToolUseBlock // forcing a bad structure
+    } as any 
   ]
 };
 
@@ -247,13 +246,21 @@ describe('ClaudeProvider', () => {
     const messages: ModelMessage[] = [
       { role: 'user', content: 'What\'s the weather?' },
       { role: 'assistant', content: 'Let me check.' },
-      { role: 'function', content: JSON.stringify({ temperature: 15, condition: 'rainy' }) }
+      { role: 'user', content: JSON.stringify({ temperature: 15, condition: 'rainy' }) }
     ];
 
-    const result = await provider.continueWithToolResult(messages, [], []);
+    const toolResults: ToolResult[] = [
+      {
+        name: 'get_weather',
+        result: { temperature: '15°C', condition: 'Rainy' },
+        tool_use_id: 'call_123' // Included tool_use_id
+      }
+    ];
+
+    const result = await provider.continueWithToolResult(messages, [], toolResults);
+    
     expect(result.response).toBe('Based on the weather data, I recommend bringing an umbrella.');
   });
-
 
   test('multi-turn conversation', async () => {
     mockCreate.mockReturnValueOnce(mockTextResponse); // First turn
@@ -275,7 +282,8 @@ describe('ClaudeProvider', () => {
 
     // No tool_calls should be returned
     expect(res.toolCalls).toBeUndefined();
-    expect(res.response).toBe('Let me think...After careful thought, no tools are needed here.');
+    expect(res.response?.replace(/\s+/g, ' ').trim())
+      .toBe('Let me think... After careful thought, no tools are needed here.'.replace(/\s+/g, ' ').trim());
   });
 
   test('handles unexpected Anthropic client data (empty content)', async () => {

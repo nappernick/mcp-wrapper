@@ -13,7 +13,7 @@
     }
   },
   "scripts": {
-    "build": "rm -rf dist && tsc",
+    "build": "rm -rf dist && bun run tsc",
     "start": "node dist/exampleApp.js",
     "test": "jest",
     "dev": "ts-node src/exampleApp.ts",

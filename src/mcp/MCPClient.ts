@@ -6,7 +6,15 @@ import {
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { z } from "zod";
 import logger from "../utils/Logger";
-import type { ModelProviderOptions } from "../providers/ModelProvider";
+import type { 
+  ModelProviderOptions, 
+  ModelMessage, 
+  ToolFunction, 
+  ModelToolCall, 
+  ToolResult,
+  ModelProvider
+} from "../providers/ModelProvider";
+import { ProviderFactory } from "../providers/ProviderFactory";
 import { ChildProcessWithoutNullStreams } from "child_process";
 
 interface MCPClientConfig {
@@ -14,14 +22,35 @@ interface MCPClientConfig {
   serverPath: string;
   serverArgs?: string[];
   env?: Record<string, string>;
+  providerName: 'openai' | 'anthropic';
 }
 
-class MCPClientWrapper {
+
+
+export interface MCPClientInterface {
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  generateResponse(prompt: string, options?: ModelProviderOptions): Promise<string>;
+  generateWithTools(
+    messages: ModelMessage[],
+    tools: ToolFunction[],
+    options?: ModelProviderOptions
+  ): Promise<{ response?: string; toolCalls?: ModelToolCall[] }>;
+  continueWithToolResult(
+    messages: ModelMessage[],
+    tools: ToolFunction[],
+    toolResults: ToolResult[],
+    options?: ModelProviderOptions
+  ): Promise<{ response: string }>;
+}
+
+class MCPClientWrapper implements MCPClientInterface {
   private client: Client;
   private transport: StdioClientTransport;
   private serverProcess?: ChildProcessWithoutNullStreams;
   private clientStarted: boolean;
   private transportStarted: boolean;
+  private provider: ModelProvider;
 
   constructor(config: MCPClientConfig, clientOptions?: ClientOptions) {
     this.clientStarted = false;
@@ -42,6 +71,11 @@ class MCPClientWrapper {
         capabilities: {},
       }
     );
+
+    this.provider = ProviderFactory.getProvider({
+      providerName: config.providerName,
+      apiKey: config.providerName === 'openai' ? process.env.OPENAI_API_KEY! : process.env.CLAUDE_API_KEY!
+    });
   }
 
   async connect(): Promise<void> {
@@ -84,6 +118,33 @@ class MCPClientWrapper {
       return response.content;
     } catch (error: any) {
       logger.error(`Failed to generate response: ${error.message}`, { error });
+      throw error;
+    }
+  }
+
+  async generateWithTools(
+    messages: ModelMessage[],
+    tools: ToolFunction[],
+    options?: ModelProviderOptions
+  ): Promise<{ response?: string; toolCalls?: ModelToolCall[] }> {
+    try {
+      return await this.provider.generateWithTools(messages, tools, options);
+    } catch (error: any) {
+      logger.error(`Failed to generate with tools: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async continueWithToolResult(
+    messages: ModelMessage[],
+    tools: ToolFunction[],
+    toolResults: ToolResult[],
+    options?: ModelProviderOptions
+  ): Promise<{ response: string }> {
+    try {
+      return await this.provider.continueWithToolResult(messages, tools, toolResults, options);
+    } catch (error: any) {
+      logger.error(`Failed to continue with tool result: ${error.message}`);
       throw error;
     }
   }

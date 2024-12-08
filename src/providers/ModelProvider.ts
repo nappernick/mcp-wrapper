@@ -34,6 +34,7 @@ export interface ModelToolCall {
 export interface ToolResult {
   name: string;
   result: any;
+  tool_use_id?: string;
 }
 
 export interface ModelProvider {
