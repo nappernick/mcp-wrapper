@@ -59,7 +59,7 @@ const response = await client.generateResponse('What is the capital of France?')
 ```typescript
 const tools = [{
   name: 'get_weather',
-  description: 'Get weather info',
+  description: 'Get weather information for a specified location.',
   input_schema: {
     type: 'object',
     properties: {
@@ -71,7 +71,7 @@ const tools = [{
 }];
 
 const response = await provider.generateWithTools(
-  [{role: 'user', content: 'What\'s the weather in London?'}],
+  [{ role: 'user', content: 'What\'s the weather in London?' }],
   tools
 );
 ```
