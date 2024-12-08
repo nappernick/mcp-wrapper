@@ -3,11 +3,6 @@ import { ModelProvider, ModelProviderOptions, ToolFunction, ModelMessage, ModelT
 import Anthropic from '@anthropic-ai/sdk';
 import logger from '../utils/Logger';
 
-interface AnthropicTextBlock {
-  type: 'text';
-  text: string;
-}
-
 interface AnthropicToolResultBlock {
   type: 'tool_result';
   content: string;
@@ -19,9 +14,23 @@ function toAnthropicTool(t: ToolFunction): Anthropic.Messages.Tool {
   return {
     name: t.name,
     description: t.description,
-    input_schema: t.input_schema as Anthropic.Messages.Tool.InputSchema // Casting
+    input_schema: t.input_schema as Anthropic.Messages.Tool.InputSchema
   };
 }
+
+type ClaudeToolUseBlock = {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input: Record<string, any>;
+}
+
+type ClaudeTextBlock = {
+  type: 'text';
+  text: string;
+}
+
+type ClaudeContentBlock = ClaudeToolUseBlock | ClaudeTextBlock;
 
 export class ClaudeProvider implements ModelProvider {
   private client: Anthropic;
@@ -64,10 +73,10 @@ export class ClaudeProvider implements ModelProvider {
     options: ModelProviderOptions = {}
   ): Promise<{ response?: string; toolCalls?: ModelToolCall[] }> {
     logger.info('Generating response with Claude (with tools)...');
-
+  
     const anthMessages = this.toAnthropicMessages(messages);
     const anthTools = tools.map(toAnthropicTool);
-
+  
     const response = await this.client.messages.create({
       model: 'claude-3-5-sonnet-20240620',
       messages: anthMessages,
@@ -77,22 +86,33 @@ export class ClaudeProvider implements ModelProvider {
       stop_sequences: options.stopSequences,
       tools: anthTools, 
     });
+  
+    // Claude returns tool calls as 'tool_use' blocks
+    const toolUses = response.content.filter((c): c is ClaudeToolUseBlock => c.type === 'tool_use');
+    
+  if (toolUses.length > 0) {
+    const calls: ModelToolCall[] = toolUses
+      .map(tu => {
+        // Check if name is present
+        if (!tu.name) {
+          return null; // skip this malformed tool
+        }
+        return { name: tu.name, arguments: tu.input };
+      })
+      .filter((c): c is ModelToolCall => c !== null);
 
-    const toolUses = response.content.filter((c: any) => c.type === 'tool_use');
-    if (toolUses.length > 0) {
-      const calls: ModelToolCall[] = toolUses.map((tu: any) => ({
-        name: tu.name,
-        arguments: tu.input ?? {}
-      }));
+    if (calls.length > 0) {
       return { toolCalls: calls };
-    } else {
-      const textContent = response.content
-        .filter((c: any) => c.type === 'text')
-        .map((c: any) => c.text)
-        .join('')
-        .trim();
-      return { response: textContent };
     }
+  }
+  
+    // No tool calls, return the textual response
+    const textContent = response.content
+      .filter((c): c is ClaudeTextBlock => c.type === 'text')
+      .map(c => c.text)
+      .join('')
+      .trim();
+    return { response: textContent };
   }
 
   async continueWithToolResult(

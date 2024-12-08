@@ -2,21 +2,29 @@
   "name": "mcp-wrapper",
   "module": "index.ts",
   "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./providers/*": {
+      "import": "./dist/providers/*.js",
+      "types": "./dist/providers/*.d.ts"
+    }
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc",
     "start": "node dist/exampleApp.js",
     "test": "jest",
     "dev": "ts-node src/exampleApp.ts",
     "eval": "bun run src/scripts/run-evals.ts",
+    "prepublish": "bun run build",
     "start-server": "bun ./src/scripts/start-server.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/jest": "^29.5.14",
     "@types/node": "^22.10.1",
     "@types/uuid": "^10.0.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2"
   },
   "keywords": [
@@ -39,6 +47,7 @@
     "@modelcontextprotocol/sdk": "latest",
     "ajv": "^8.17.1",
     "axios": "^1.7.9",
+    "colorette": "^2.0.20",
     "dotenv": "^16.4.7",
     "openai": "^4.76.0",
     "uuid": "^11.0.3",

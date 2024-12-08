@@ -31,9 +31,6 @@ const CONFIG: Config = {
   MCP_SERVER_COMMAND: process.env.MCP_SERVER_COMMAND || 'node',
   MCP_SERVER_ARGS: process.env.MCP_SERVER_ARGS ? process.env.MCP_SERVER_ARGS.split(' ') : [],
   CACHE_TTL: parseInt(process.env.CACHE_TTL || '3600'),
-  // New configurations for TCP transport
-//   MCP_SERVER_HOST: process.env.MCP_SERVER_HOST || '127.0.0.1',
-//   MCP_SERVER_PORT: process.env.MCP_SERVER_PORT ? parseInt(process.env.MCP_SERVER_PORT) : 4000,
 };
 
 // Validate Config
