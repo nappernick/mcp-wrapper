@@ -23,6 +23,7 @@ async function runEvals() {
     serverCommand: config.MCP_SERVER_COMMAND,
     serverArgs: config.MCP_SERVER_ARGS,
     serverPath: serverScriptPath,
+    providerName: config.PROVIDER_NAME 
   });
 
   const started = mcpClient.isStartedClient() && mcpClient.isStartedTransport();

@@ -69,7 +69,8 @@ describe('MCPClientWrapper', () => {
     wrapper = new MCPClientWrapper({
       serverCommand: 'bun',
       serverPath: './someScript.js',
-      serverArgs: []
+      serverArgs: [],
+      providerName: 'anthropic'
     });
   });
 

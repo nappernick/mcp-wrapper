@@ -76,6 +76,12 @@ const response = await provider.generateWithTools(
 );
 ```
 
+#### Use in Project
+```
+bun build
+bun link mcp-wrapper
+```
+
 ### Running Evaluations
 
 ```bash
