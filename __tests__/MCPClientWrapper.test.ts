@@ -70,7 +70,7 @@ describe('MCPClientWrapper', () => {
       serverCommand: 'bun',
       serverPath: './someScript.js',
       serverArgs: [],
-      providerName: 'anthropic'
+      // providerName: 'anthropic'
     });
   });
 

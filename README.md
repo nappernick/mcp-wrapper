@@ -46,7 +46,7 @@ CACHE_TTL=3600
 import { MCPClientWrapper, ProviderFactory } from './src';
 
 const client = new MCPClientWrapper({
-  serverCommand: 'node',
+  serverCommand: 'bun',
   serverPath: './src/scripts/start-server.ts'
 });
 

@@ -1,22 +1,26 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
+    "types": ["bun-types"],
+    "module": "esnext",
+    "target": "esnext",
     "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": true,
+    "allowSyntheticDefaultImports": true,
+    "noEmit": true,
+    "composite": true,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
     "strict": true,
+    "downlevelIteration": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "baseUrl": ".",
-    "paths": {
-      "@mcp-wrapper/*": ["src/*"]
-    }
-  },
-  "include": ["src/**/*"],
+    "allowJs": true,
+},
+  "include": ["index.ts", "src/**/*"],
   "exclude": ["node_modules", "dist", "__tests__"]
 }

@@ -1,4 +1,3 @@
-// src/providers/ModelProvider.ts
 export type ProviderName = 'openai' | 'anthropic';
 
 export interface ModelProviderOptions {
@@ -18,12 +17,13 @@ export interface JSONSchema {
 export interface ToolFunction {
   name: string;
   description: string;
-  input_schema: JSONSchema; // unified schema
+  input_schema: any;
 }
 
 export interface ModelMessage {
-  role: 'user' | 'assistant' | 'system' | 'tool' | 'function';
-  content: string;
+  role: 'user' | 'assistant' | 'system' | 'function';
+  content?: string;
+  name?: string;
 }
 
 export interface ModelToolCall {
@@ -38,7 +38,10 @@ export interface ToolResult {
 }
 
 export interface ModelProvider {
-  generateResponse(prompt: string, options?: ModelProviderOptions): Promise<string>;
+  generateResponse(
+    prompt: string,
+    options?: ModelProviderOptions
+  ): Promise<string>;
 
   generateWithTools(
     messages: ModelMessage[],

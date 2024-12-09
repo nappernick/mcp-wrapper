@@ -1,7 +1,6 @@
 import { expect, test, mock, describe, beforeEach } from "bun:test";
 import { OpenAIProvider } from '../src/providers/OpenAIProvider';
 import { ToolFunction } from '../src/providers/ModelProvider';
-import OpenAI from 'openai';
 
 // Define types for the mock responses
 

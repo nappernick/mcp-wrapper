@@ -1,16 +1,12 @@
 // src/config/config.ts
 import dotenv from 'dotenv';
-import { resolve } from 'path';
+import path from 'node:path';
 import logger from '../utils/Logger';
 
 dotenv.config();
 
 // Force reload of .env file
-dotenv.config({ override: true, path: resolve(process.cwd(), '.env') });
-
-// Debug the environment loading
-console.log('Loading environment from:', resolve(process.cwd(), '.env'));
-console.log('Raw ENV PROVIDER_NAME:', process.env.PROVIDER_NAME);
+dotenv.config({ override: true, path: path.resolve(process.cwd(), '.env') });
 
 
 interface Config {
@@ -27,7 +23,7 @@ interface Config {
 const CONFIG: Config = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
   CLAUDE_API_KEY: process.env.CLAUDE_API_KEY || '',
-  PROVIDER_NAME: (process.env.PROVIDER_NAME as 'openai' | 'anthropic') || 'openai',
+  PROVIDER_NAME: (process.env.PROVIDER_NAME as 'openai' | 'anthropic') || 'anthropic',
   MCP_SERVER_COMMAND: process.env.MCP_SERVER_COMMAND || 'node',
   MCP_SERVER_ARGS: process.env.MCP_SERVER_ARGS ? process.env.MCP_SERVER_ARGS.split(' ') : [],
   CACHE_TTL: parseInt(process.env.CACHE_TTL || '3600'),

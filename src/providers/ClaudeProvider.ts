@@ -1,8 +1,9 @@
+// mcp-wrapper/src/providers/ClaudeProvider.ts
+
 import { ModelProvider, ModelProviderOptions, ToolFunction, ModelMessage, ModelToolCall, ToolResult } from './ModelProvider';
 import Anthropic from '@anthropic-ai/sdk';
 import logger from '../utils/Logger';
 
-import type { MessageParam, Tool } from '@anthropic-ai/sdk/resources/messages.mjs';
 interface AnthropicToolResultBlock {
   type: 'tool_result';
   content: string;
@@ -79,7 +80,7 @@ export class ClaudeProvider implements ModelProvider {
       );
       
       return textBlocks.map(block => block.text).join(' ').trim();
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Failed to generate response:', error);
       throw error;
     }
@@ -106,7 +107,7 @@ export class ClaudeProvider implements ModelProvider {
         (block: any) => block.type === 'tool_use'
       );
 
-      console.log("\n\n\n\n\n\nTOOL USE BLOCKS", toolUseBlocks);
+      logger.warn(`\n\n\n\n\n\nTOOL USE BLOCKS: ${toolUseBlocks}`);
 
       // Get text content from response
       const textContent = response.content
@@ -131,7 +132,7 @@ export class ClaudeProvider implements ModelProvider {
       // Return text response if no valid tool calls
       return { response: textContent || 'I will call a tool now.' };
     } catch (error) {
-      logger.error('Failed to generate with tools:', error);
+      logger.error(`Failed to generate with tools: ${error}`);
       throw error;
     }
   }
@@ -164,7 +165,9 @@ export class ClaudeProvider implements ModelProvider {
         });
       });
 
-      console.log("\n\nMessages being sent to Claude:", 
+      logger.info('\n\nMessages being sent to Claude:')
+
+      logger.warn(
         JSON.stringify(this.conversationHistory, null, 2));
 
       const response = await this.client.messages.create({
@@ -191,8 +194,12 @@ export class ClaudeProvider implements ModelProvider {
 
       return { response: textContent };
     } catch (error) {
-      logger.error('Failed to continue with tool result:', error);
+      logger.error(`Failed to continue with tool result: ${error}`);
       throw error;
     }
+  }
+
+  async executeTool(name: string, args: Record<string, any>): Promise<any> {
+    // we need to implement
   }
 }

@@ -1,6 +1,7 @@
-// src/providers/OpenAIProvider.ts
+// mcp-wrapper/src/providers/OpenAIProvider.ts
 import type { ModelProvider, ModelProviderOptions, ToolFunction, ModelMessage, ModelToolCall, ToolResult } from './ModelProvider';
 import OpenAI from 'openai';
+import { ChatCompletionMessageParam } from 'openai/resources/chat/index'
 import logger from '../utils/Logger';
 
 function toOpenAIFunction(t: ToolFunction): OpenAI.Chat.Completions.ChatCompletionTool {
@@ -44,27 +45,28 @@ export class OpenAIProvider implements ModelProvider {
   ): Promise<{ response?: string; toolCalls?: ModelToolCall[] }> {
     logger.info('Generating response with OpenAI (with tools)...');
 
-    const openaiMessages = messages.map(m => {
-      if (m.role === 'tool') {
+    const openaiMessages: ChatCompletionMessageParam[] = messages.map(m => {
+      if (m.role === 'function') {
         return {
-          role: 'function' as const,
+          role: 'function',
           name: 'unknown_function',
-          content: m.content
+          content: m.content || ''  // ensure content is never null
         };
-      } else if (m.role === 'function') {
+      // @ts-expect-error
+      } else if (m.role === 'tool') {
         return {
-          role: 'function' as const,
+          role: 'function',
           name: (m as any).functionName || 'unknown_function',
-          content: m.content
+          content: m.content || ''  // ensure content is never null
         };
       } else {
         return {
-          role: m.role as 'system'|'user'|'assistant',
-          content: m.content
+          role: m.role as 'system' | 'user' | 'assistant',
+          content: m.content || ''  // ensure content is never null
         };
       }
     });
-
+  
     const functions = tools.map(toOpenAIFunction);
 
     const response = await this.client.chat.completions.create({
@@ -131,6 +133,7 @@ export class OpenAIProvider implements ModelProvider {
           content: m.content,
         };
       }
+      // @ts-expect-error
       if (m.role === 'tool') {
         return {
           role: 'function' as const,
@@ -154,7 +157,7 @@ export class OpenAIProvider implements ModelProvider {
 
     const response = await this.client.chat.completions.create({
       model: 'gpt-4o',
-      messages: finalMessages,
+      messages: finalMessages as ChatCompletionMessageParam[],
       max_tokens: options.maxTokens ?? 1000,
       temperature: options.temperature ?? 0.7,
       top_p: options.topP ?? 1.0,

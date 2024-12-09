@@ -1,11 +1,11 @@
-// src/providers/ProviderFactory.ts
+// mcp-wrapper/src/providers/ProviderFactory.ts
 import type { ModelProvider } from './ModelProvider';
 import { OpenAIProvider } from './OpenAIProvider';
 import { ClaudeProvider } from './ClaudeProvider';
 import logger from '../utils/Logger';
 
 interface ProviderConfig {
-  providerName: 'openai' | 'anthropic';
+  providerName: 'anthropic' | 'openai';
   apiKey: string;
 }
 
