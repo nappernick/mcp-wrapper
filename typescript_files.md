@@ -804,7 +804,7 @@ interface Config {
 const CONFIG: Config = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
   CLAUDE_API_KEY: process.env.CLAUDE_API_KEY || '',
-  PROVIDER_NAME: (process.env.PROVIDER_NAME as 'openai' | 'anthropic') || 'openai',
+  PROVIDER_NAME: (process.env.PROVIDER_NAME as 'openai' | 'anthropic') || 'anthropic',
   MCP_SERVER_COMMAND: process.env.MCP_SERVER_COMMAND || 'node',
   MCP_SERVER_ARGS: process.env.MCP_SERVER_ARGS ? process.env.MCP_SERVER_ARGS.split(' ') : [],
   CACHE_TTL: parseInt(process.env.CACHE_TTL || '3600'),
@@ -1483,6 +1483,7 @@ import { handleSearchAndStore } from 'mcp-research-assistant/src/handlers/search
 import { summarizeText } from 'mcp-research-assistant/src/tools/summarizeText';
 import { translateText } from 'mcp-research-assistant/src/tools/translateText';
 import { extractEntities } from 'mcp-research-assistant/src/tools/extractEntities';
+import { OpenAIProvider } from '..';
 
 const HTTP_PORT = 8000;
 
@@ -1506,7 +1507,8 @@ const HTTP_PORT = 8000;
 
     // Initialize LLMClient with mcpClient
     console.log('12. Initializing LLMClient...');
-    const llmClient = new LLMClient(mcpClient);
+    const openAIProvider = new OpenAIProvider(process.env.OPENAI_API_KEY as string); 
+    const llmClient = new LLMClient(openAIProvider);
     console.log('13. LLMClient initialized.');
 
     // Define toolHandlers
@@ -1551,7 +1553,7 @@ const HTTP_PORT = 8000;
             const jsonRpcRequest = JSON.parse(bodyText);
             const response = await mcpServer.handleRequest(jsonRpcRequest);
 
-            return new Response(JSON.stringify(response), {
+            return new Response(response, {
               status: 200,
               headers: { 'Content-Type': 'application/json' },
             });
@@ -2085,7 +2087,81 @@ class MCPServerWrapper {
     this.requestHandlers.set("call_tool", callToolHandler);
   }
 
+  private async processGenerateWithTools(request: any): Promise<any> {
+    const { messages, tools, options } = request.params;
+
+    try {
+      // Step 1: Call generateWithTools on the model provider
+      // @ts-ignore
+      const initialResult = await this.modelProvider.generateWithTools(messages, tools, options);
+
+      let finalResponse: string | undefined = initialResult.response;
+      let toolCalls = initialResult.toolCalls;
+
+      // Step 2: While there are toolCalls, process them
+      while (toolCalls && toolCalls.length > 0) {
+        const toolResults: ToolResult[] = [];
+
+        for (const toolCall of toolCalls) {
+          const toolName = toolCall.name;
+          const toolArgs = toolCall.arguments;
+
+          // @ts-ignore
+          const toolHandler = this.toolHandlers[toolName];
+          if (!toolHandler) {
+            throw new Error(`No tool handler found for tool: ${toolName}`);
+          }
+
+          // Step 2a: Execute the tool
+          const toolResult = await toolHandler(toolArgs);
+          toolResults.push({
+            name: toolName,
+            result: toolResult,
+          });
+        }
+
+        // Step 3: Call continueWithToolResult with the tool results
+          // @ts-ignore
+        const continueResult = await this.modelProvider.continueWithToolResult(
+          messages,
+          tools,
+          toolResults,
+          options
+        );
+
+        finalResponse = continueResult.response;
+        // Check if there are more toolCalls
+          // @ts-ignore
+        toolCalls = continueResult.toolCalls;
+      }
+
+      // Step 4: Return the final response to the client
+      return {
+        jsonrpc: '2.0',
+        result: {
+          content: finalResponse,
+        },
+        id: request.id,
+      };
+    } catch (error: any) {
+      logger.error('Error processing generate_with_tools', { error });
+      return {
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: error.message,
+          data: error,
+        },
+        id: request.id,
+      };
+    }
+  }
+  
+
   public async handleRequest(request: any): Promise<any> {
+    if (request.method === 'generate_with_tools') {
+      return await this.processGenerateWithTools(request);
+    }
     const method = request.method;
     const handler = this.requestHandlers.get(method);
 
@@ -2621,7 +2697,7 @@ import { ClaudeProvider } from './ClaudeProvider';
 import logger from '../utils/Logger';
 
 interface ProviderConfig {
-  providerName: 'openai' | 'anthropic';
+  providerName: 'anthropic' | 'openai';
   apiKey: string;
 }
 
